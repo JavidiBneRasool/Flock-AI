@@ -100,7 +100,7 @@ export class AutonomousLoop {
         console.log(`  · Step ${event.step.id}: ${event.step.description}`);
         process.stdout.write(`    `);
       } else if (event.type === 'step_complete') {
-        const output = (event.result || '').substring(0, 80).replace(/\n/g, ' ');
+        const output = String(event.result || '').substring(0, 80).replace(/\n/g, ' ');
         console.log(`    ✓ ${output}`);
       } else if (event.type === 'step_failed') {
         console.log(`    ✕ Failed: ${event.error}`);

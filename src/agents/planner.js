@@ -130,7 +130,7 @@ Rules:
         id: r.id,
         description: r.description,
         status: r.status,
-        output: r.result?.substring(0, 200) || r.error
+        output: String(r.result || r.error || '').substring(0, 200)
       }))
     };
   }
