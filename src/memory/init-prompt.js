@@ -55,7 +55,10 @@ export class InitPrompt {
             'Always log actions to ADMINReadme.md',
             'Operate offline-first, no cloud dependencies',
             'Maintain audit trail of all interactions',
-            'Use Think → Execute → Observe pattern',
+            'Use Thought → Action → Observation (TAO) pattern',
+            'Follow Open Interpreter terminal safety protocols',
+            'Utilize multi-agent specialist roster for missions',
+            'Distill memory into semantic summaries periodically',
             'Store learned solutions in .flock/skills/'
           ],
           current_plan: projectDNA.currentPlan || null
