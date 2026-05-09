@@ -100,8 +100,13 @@ export class AutonomousLoop {
         console.log(`  · Step ${event.step.id}: ${event.step.description}`);
         process.stdout.write(`    `);
       } else if (event.type === 'step_complete') {
-        const output = String(event.result || '').substring(0, 80).replace(/\n/g, ' ');
-        console.log(`    ✓ ${output}`);
+        let output = '';
+        if (typeof event.result === 'object') {
+          output = JSON.stringify(event.result).substring(0, 100);
+        } else {
+          output = String(event.result || '').substring(0, 100);
+        }
+        console.log(`    ✓ ${output.replace(/\n/g, ' ')}...`);
       } else if (event.type === 'step_failed') {
         console.log(`    ✕ Failed: ${event.error}`);
       }
