@@ -6,6 +6,7 @@ import { AutonomousLoop } from "../src/agents/autonomous.js";
 import { Auditor } from "../src/agents/auditor.js";
 import { Coordinator } from "../src/agents/coordinator.js";
 import { Phoenix } from "../src/agents/phoenix.js";
+import { Consultant } from "../src/agents/consultant.js";
 import { MemoryEngine } from "../src/memory/engine.js";
 import { InitPrompt } from "../src/memory/init-prompt.js";
 import readline from "readline";
@@ -42,6 +43,7 @@ const initPrompt = new InitPrompt(CONFIG_PATH);
 const autonomous = new AutonomousLoop(config.model);
 const coordinator = new Coordinator(brain, CONFIG_PATH);
 const phoenix = new Phoenix(config.model);
+const consultant = new Consultant(brain, CONFIG_PATH);
 let conversationHistory = [];
 
 const THEMES = {
@@ -60,7 +62,7 @@ const c = {
 };
 
 function printLine(type, text) {
-  const icons = { info: c.dim("·"), done: c.green("✓"), warn: c.yellow("⚠"), error: c.red("✕"), phoenix: "🔥" };
+  const icons = { info: c.dim("·"), done: c.green("✓"), warn: c.yellow("⚠"), error: c.red("✕"), phoenix: "🔥", consult: "🧐" };
   console.log(`  ${icons[type] || icons.info}  ${(c[type] || c.white)(text)}`);
 }
 
@@ -78,6 +80,12 @@ function printBanner() {
 }
 
 const COMMANDS = {
+  // ── CHIMERA ─────────────────────────────────────────────
+  '/suggest': async (input) => {
+    const target = input.replace('/suggest', '').trim() || '.';
+    await consultant.suggest(target);
+  },
+
   // ── PHOENIX ─────────────────────────────────────────────
   '/phoenix': async () => {
     printLine("phoenix", "PHOENIX RECURSIVE EVOLUTION ACTIVATED");
