@@ -3,6 +3,7 @@ import { Planner } from './planner.js';
 import { Terminal } from '../tools/terminal.js';
 import { MemoryEngine } from '../memory/engine.js';
 import { InitPrompt } from '../memory/init-prompt.js';
+import { ui } from '../tools/terminal-ui.js';
 import fs from 'fs';
 
 export class AutonomousLoop {
@@ -51,25 +52,24 @@ export class AutonomousLoop {
     console.log(`  · Goal: ${goal}\n`);
 
     // Phase 1: PLAN
-    console.log('  ── PHASE 1: PLANNING ──');
+    ui.start('PHASE 1: PLANNING');
     const systemPrompt = await this.boot();
     
     try {
       this.plan = await this.planner.decompose(goal);
     } catch (err) {
-      console.log(`  ⚠  Planner failed: ${err.message}`);
-      console.log('  · Continuing with fallback plan...');
+      ui.step('Fallback plan activated');
       this.plan = this.planner._fallbackPlan(goal);
     }
     
-    console.log(`  ✓ Plan created: ${this.plan.length} steps`);
+    ui.stop(`Plan created: ${this.plan.length} steps`);
     this.plan.forEach((s, i) => {
       console.log(`    ${i+1}. ${s.description}`);
     });
     console.log('');
 
     // Phase 2: EXECUTE
-    console.log('  ── PHASE 2: EXECUTION ──');
+    ui.start('PHASE 2: EXECUTION');
     this.state = 'executing';
     
     const executor = async (step) => {
@@ -113,9 +113,10 @@ export class AutonomousLoop {
     };
 
     this.results = await this.planner.execute(this.plan, executor, onProgress);
+    ui.stop('Execution complete');
 
     // Phase 3: OBSERVE
-    console.log('\n  ── PHASE 3: OBSERVATION ──');
+    ui.start('PHASE 3: OBSERVATION');
     this.state = 'observing';
     
     const summary = this.planner.summarize(
@@ -123,12 +124,10 @@ export class AutonomousLoop {
       this.results
     );
 
-    console.log(`  · Completed: ${summary.completed}/${summary.total}`);
-    console.log(`  · Failed: ${summary.failed}`);
-    console.log(`  · Success: ${summary.success ? 'YES' : 'NO'}\n`);
+    ui.stop(`Success: ${summary.success ? 'YES' : 'NO'}`);
 
     // Phase 4: LEARN
-    console.log('  ── PHASE 4: LEARNING ──');
+    ui.start('PHASE 4: LEARNING');
     this.state = 'learning';
     
     if (summary.success) {
@@ -136,6 +135,7 @@ export class AutonomousLoop {
     } else {
       await this._learnFromFailure(goal, summary);
     }
+    ui.stop('Learning complete');
 
     // Log to audit
     this._auditLog(goal, summary);

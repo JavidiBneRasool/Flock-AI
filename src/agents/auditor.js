@@ -1,10 +1,10 @@
 import { Brain } from './brain.js';
 import { MemoryEngine } from '../memory/engine.js';
+import { ui } from '../tools/terminal-ui.js';
 import fs from 'fs';
 import path from 'path';
 
 const SPINNER = ['⠋','⠙','⠹','⠸','⠼','⠴','⠦','⠧','⠇','⠏'];
-const STATUS = ['Scanning structure...','Reading files...','Mapping dependencies...','Checking integrity...','Building report...'];
 
 export class Auditor {
   constructor(brain, configPath) {
@@ -35,19 +35,17 @@ export class Auditor {
     };
 
     // ═══ SCAN ═══
-    const spin = this._spinner('Scanning');
+    ui.start('Scanning structure');
     if (stat.isDirectory()) {
       await this._liveWalk(resolved, report, opts.deep ? 10 : 2, 0);
     } else {
       report.files.push({ path: resolved, size: stat.size, ext: path.extname(resolved) });
       report.totalSize = stat.size;
-      console.log(`  📄 ${path.basename(resolved)} ${this._fmt(stat.size)}`);
     }
-    clearInterval(spin);
-    console.log(`\r  ✓ Scanned: ${report.files.length} files · ${report.dirs.length} dirs · ${this._fmt(report.totalSize)}`);
+    ui.stop(`Scanned: ${report.files.length} files · ${this._fmt(report.totalSize)}`);
 
     // ═══ READ KEY FILES ═══
-    console.log(`\n  ═══ KEY FILES ═══`);
+    console.log(`  ═══ KEY FILES ═══`);
     await this._readKeyFiles(report);
 
     // ═══ QUICK ANALYSIS (always fast) ═══
@@ -55,13 +53,12 @@ export class Auditor {
 
     // ═══ AI ANALYSIS (only if deep, with strict timeout) ═══
     if (opts.deep && !opts.online) {
-      const aiSpin = this._spinner('AI analysis');
+      ui.start('AI analysis');
       report.aiAnalysis = await this._aiAnalyze(report, heuristics);
-      clearInterval(aiSpin);
       if (report.aiAnalysis) {
-        process.stdout.write(`\r  ✓ AI analysis complete\n`);
+        ui.stop('AI analysis complete');
       } else {
-        process.stdout.write(`\r  ⚡ Skipped (heuristic used)\n`);
+        ui.step('Skipped AI analysis');
       }
     } else {
       report.aiAnalysis = { purpose: `${heuristics.projectType} project`, quality: 5, risks: [], recommendation: '' };
@@ -69,7 +66,7 @@ export class Auditor {
 
     // ═══ VERIFY ═══
     if (opts.verify) {
-      console.log(`\n  ═══ INTEGRITY CHECK ═══`);
+      console.log(`  ═══ INTEGRITY CHECK ═══`);
       report.verify = await this._verify(report);
     }
 

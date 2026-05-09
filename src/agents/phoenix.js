@@ -2,6 +2,7 @@ import { Brain } from './brain.js';
 import { Coordinator } from './coordinator.js';
 import { AutonomousLoop } from './autonomous.js';
 import { Auditor } from './auditor.js';
+import { ui } from '../tools/terminal-ui.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -39,21 +40,26 @@ export class Phoenix {
     this.lastHeartbeat = Date.now();
 
     try {
-      console.log(`  🔥 Phoenix: Analyzing environment for evolution...`);
+      ui.start('Phoenix: Evolution Heartbeat Active');
       
       // 1. Proactive Knowledge Feeding
+      ui.step('Feeding: Analyzing logs for skills');
       await this._feedOnLogs();
 
       // 2. Self-Audit & Self-Correction
-      if (Math.random() > 0.7) { // 30% chance per heartbeat to trigger self-audit
+      if (Math.random() > 0.7) { 
+        ui.step('Evolution: Triggering recursive self-audit');
         await this._selfUpgrade();
       }
 
       // 3. Update Visual Style based on Evolution
+      ui.step('Styling: Adapting visual theme');
       this._evolveStyle();
 
+      ui.stop('Heartbeat Pulse Complete');
+
     } catch (err) {
-      console.error(`  ✕ Phoenix Heartbeat Error: ${err.message}`);
+      ui.error(`Phoenix Heartbeat Error: ${err.message}`);
     } finally {
       this.isEvolving = false;
     }
