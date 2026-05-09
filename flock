@@ -1,0 +1,63 @@
+#!/bin/bash
+
+FLOCK_DIR="$HOME/flock-cli"
+COMMANDS_DIR="$FLOCK_DIR/commands"
+VAULT_SCRIPT="$FLOCK_DIR/flock_knowledge.py"
+GUARDIAN_PID_FILE="$FLOCK_DIR/.flock.pid"
+
+case "$1" in
+    run)
+        # Create a .cmd file from arguments
+        TAG="${2:-#MISC}"
+        shift 2
+        CMD_CONTENT="$*"
+        if [ -z "$CMD_CONTENT" ]; then
+            echo "❌ Usage: flock run #TAG 'command here'"
+            exit 1
+        fi
+        TIMESTAMP=$(date +%s)
+        CMD_FILE="$COMMANDS_DIR/run_${TIMESTAMP}.cmd"
+        echo "#TAG: ${TAG#\#}" > "$CMD_FILE"
+        echo "$CMD_CONTENT" >> "$CMD_FILE"
+        echo "📤 Queued command with tag: $TAG"
+        ;;
+
+    tag)
+        # List all tags in the vault
+        sqlite3 "$FLOCK_DIR/flock_vault.db" "SELECT DISTINCT tag FROM knowledge;" | sort
+        ;;
+
+    query)
+        # Query the vault
+        shift
+        python3 "$VAULT_SCRIPT" --query "$*"
+        ;;
+
+    status)
+        echo "🔍 Flock System Status:"
+        echo "━━━━━━━━━━━━━━━━━━━━"
+        if [ -f "$GUARDIAN_PID_FILE" ]; then
+            PID=$(cat "$GUARDIAN_PID_FILE")
+            if kill -0 "$PID" 2>/dev/null; then
+                echo "✅ Guardian: Running (PID $PID)"
+            else
+                echo "⚠️ Guardian: Dead (stale PID file)"
+            fi
+        else
+            echo "❌ Guardian: Not running"
+        fi
+        echo "📂 Commands in queue: $(ls -1 "$COMMANDS_DIR"/*.cmd 2>/dev/null | wc -l)"
+        echo "📊 Knowledge entries: $(sqlite3 "$FLOCK_DIR/flock_vault.db" "SELECT COUNT(*) FROM knowledge;")"
+        ;;
+
+    help|*)
+        echo "flock - Supreme Commander Interface"
+        echo ""
+        echo "Usage:"
+        echo "  flock run #TAG 'command'  - Queue a command with tag"
+        echo "  flock tag                 - List all tags in vault"
+        echo "  flock query '#TAG'        - Query the vault"
+        echo "  flock status              - Show system status"
+        echo "  flock help                - Show this message"
+        ;;
+esac

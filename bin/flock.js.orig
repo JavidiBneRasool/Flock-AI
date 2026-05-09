@@ -1,0 +1,113 @@
+#!/usr/bin/env node
+
+import { Brain } from "../src/agents/brain.js";
+import { MemoryEngine } from "../src/memory/engine.js";
+import readline from "readline";
+import chalk from "chalk";
+import fs from "fs";
+import path from "path";
+
+const CONFIG_PATH = path.join(process.env.HOME, ".flock");
+const CONFIG_FILE = path.join(CONFIG_PATH, "config.json");
+
+// ── SETUP ─────────────────────────────────────────────────────────────────
+if (!fs.existsSync(CONFIG_PATH)) fs.mkdirSync(CONFIG_PATH, { recursive: true });
+const loadJSON = (file, def) => { try { return JSON.parse(fs.readFileSync(file)); } catch { return def; } };
+const saveJSON = (file, data) => fs.writeFileSync(file, JSON.stringify(data, null, 2));
+
+let config = loadJSON(CONFIG_FILE, { agent: "local", model: "llama3" });
+const brain = new Brain(config.model);
+const memory = new MemoryEngine(CONFIG_PATH);
+
+let conversationHistory = [];
+
+// ── COLORS ────────────────────────────────────────────────────────────────
+const c = {
+  green: (t) => chalk.hex("#4ade80")(t),
+  orange: (t) => chalk.hex("#f97316")(t),
+  blue: (t) => chalk.hex("#3b82f6")(t),
+  dim: (t) => chalk.hex("#475569")(t),
+  red: (t) => chalk.hex("#ef4444")(t),
+  yellow: (t) => chalk.hex("#fbbf24")(t),
+  white: (t) => chalk.hex("#e2e8f0")(t),
+  lime: (t) => chalk.hex("#a3e635")(t),
+};
+
+function printLine(type, text) {
+  const icons = { info: c.dim("·"), done: c.green("✓"), warn: c.yellow("⚠"), error: c.red("✕"), ai: c.green("⬡") };
+  const colors = { info: c.dim, done: c.green, warn: c.yellow, error: c.red, ai: c.white };
+  const icon = icons[type] || icons.info;
+  const colorFn = colors[type] || c.white;
+  console.log(`  ${icon}  ${colorFn(text)}`);
+}
+
+function printBanner() {
+  console.log("");
+  console.log(c.green("  ╔═══════════════════════════════╗"));
+  console.log(c.green("  ║  ") + c.lime("CUFIN") + c.green(".") + c.orange("FLOCK") + c.green("  ") + c.dim("v1.1.0 (LOCAL)  ") + c.green("║"));
+  console.log(c.green("  ║  ") + c.dim("Autonomous AI OS Loop       ") + c.green("║"));
+  console.log(c.green("  ╚═══════════════════════════════╝"));
+  console.log("");
+  printLine("info", `Engine: ${c.green("⬡ LOCAL")} (${config.model})`);
+  printLine("info", `Memory: ${memory.getSkills().length} skills learned`);
+  console.log("");
+}
+
+async function callAI(input) {
+  const dna = memory.loadProjectDNA();
+  const system = `You are cufin.flock — a local-first Autonomous CLI AI OS.
+Project DNA: ${JSON.stringify(dna)}
+Skills: ${memory.getSkills().join(", ")}
+Respond terse, direct. Use prefixes: INFO:, DONE:, WARN:, ERROR:, APPLIED:.
+Max 10 lines.`;
+
+  process.stdout.write(`  ${c.green("⬡")}  `);
+
+  try {
+    const messages = [
+      { role: "system", content: system },
+      ...conversationHistory,
+      { role: "user", content: input }
+    ];
+
+    const reply = await brain.chat(messages, (chunk) => {
+      process.stdout.write(c.white(chunk));
+    });
+
+    console.log("\n");
+    conversationHistory.push({ role: "user", content: input });
+    conversationHistory.push({ role: "assistant", content: reply });
+    if (conversationHistory.length > 20) conversationHistory = conversationHistory.slice(-20);
+    
+    // Auto-save history to ADMINReadme.md
+    const historyEntry = `\n### [${new Date().toLocaleString()}]\n**User:** ${input}\n**Agent:** ${reply.replace(/\n/g, ' ')}\n`;
+    fs.appendFileSync("ADMINReadme.md", historyEntry);
+
+  } catch (err) {
+    console.log("");
+    printLine("error", err.message);
+  }
+}
+
+async function main() {
+  console.clear();
+  printBanner();
+
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  const prompt = () => {
+    rl.question(c.green(`\n  ⬡ flock ❯ `), async (input) => {
+      if (!input.trim()) { prompt(); return; }
+      if (input === "exit" || input === "quit") process.exit(0);
+      await callAI(input.trim());
+      prompt();
+    });
+  };
+
+  prompt();
+}
+
+main();

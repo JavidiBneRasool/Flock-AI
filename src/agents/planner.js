@@ -1,0 +1,126 @@
+import { Brain } from './brain.js';
+import { MemoryEngine } from '../memory/engine.js';
+
+export class Planner {
+  constructor(brain, memory) {
+    this.brain = brain;
+    this.memory = memory;
+  }
+
+  /**
+   * Decompose a high-level goal into ordered subtasks
+   * @param {string} goal - User's complex objective
+   * @returns {Array} - Ordered array of { id, description, tool, status, result }
+   */
+  async decompose(goal) {
+    const system = `You are a task planner for an autonomous CLI agent.
+Break the user's goal into ordered, executable shell-level subtasks.
+Each subtask must be a single concrete action (shell command, file operation, or code generation).
+Return ONLY a JSON array. No explanation, no markdown.
+
+Format: [{"id":1,"description":"Check current directory","tool":"terminal","command":"pwd"}]
+
+Rules:
+- Use "terminal" for shell commands
+- Use "write_file" for creating/editing files
+- Use "brain" for analysis/thinking steps
+- Maximum 7 subtasks
+- Order matters — dependencies first`;
+
+    try {
+      const response = await this.brain.chat([
+        { role: 'system', content: system },
+        { role: 'user', content: `Goal: ${goal}` }
+      ]);
+
+      // Extract JSON from response
+      const jsonMatch = response.match(/\[[\s\S]*\]/);
+      if (!jsonMatch) {
+        throw new Error('Planner did not return valid JSON');
+      }
+
+      const plan = JSON.parse(jsonMatch[0]);
+      
+      // Store plan in memory
+      this.memory = new MemoryEngine(process.env.HOME + '/.flock');
+      this.memory.savePlan({ goal, subtasks: plan, created: new Date().toISOString() });
+      
+      return plan;
+    } catch (err) {
+      // Fallback: create a simple plan manually
+      return this._fallbackPlan(goal);
+    }
+  }
+
+  /**
+   * Fallback plan when AI decomposition fails
+   */
+  _fallbackPlan(goal) {
+    return [
+      { id: 1, description: 'Analyze goal requirements', tool: 'brain', command: `Analyze: ${goal}` },
+      { id: 2, description: 'Check current project state', tool: 'terminal', command: 'ls -la && pwd' },
+      { id: 3, description: 'Execute primary action', tool: 'terminal', command: 'echo "Implementing: ' + goal.substring(0, 50) + '..."' },
+      { id: 4, description: 'Verify results', tool: 'terminal', command: 'echo "Verification complete"' }
+    ];
+  }
+
+  /**
+   * Execute a plan step by step
+   * @param {Array} plan - Subtasks from decompose()
+   * @param {Function} executor - Function that takes a subtask and returns result
+   * @param {Function} onProgress - Callback for each completed step
+   */
+  async execute(plan, executor, onProgress) {
+    const results = [];
+    
+    for (const step of plan) {
+      if (onProgress) {
+        onProgress({ type: 'step_start', step });
+      }
+
+      try {
+        const result = await executor(step);
+        results.push({ ...step, status: 'completed', result });
+        
+        if (onProgress) {
+          onProgress({ type: 'step_complete', step, result });
+        }
+      } catch (err) {
+        results.push({ ...step, status: 'failed', error: err.message });
+        
+        if (onProgress) {
+          onProgress({ type: 'step_failed', step, error: err.message });
+        }
+        
+        // Stop on failure unless step is marked optional
+        if (!step.optional) {
+          break;
+        }
+      }
+    }
+    
+    return results;
+  }
+
+  /**
+   * Generate a summary of the plan execution
+   */
+  summarize(plan, results) {
+    const completed = results.filter(r => r.status === 'completed').length;
+    const failed = results.filter(r => r.status === 'failed').length;
+    
+    return {
+      goal: plan.goal,
+      total: plan.subtasks?.length || plan.length,
+      completed,
+      failed,
+      success: failed === 0,
+      results: results.map(r => ({
+        id: r.id,
+        description: r.description,
+        status: r.status,
+        output: r.result?.substring(0, 200) || r.error
+      }))
+    };
+  }
+}

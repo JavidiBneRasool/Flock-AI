@@ -1,0 +1,2 @@
+#TAG: UTIL
+grep 'Backup' ~/backups/backup.log

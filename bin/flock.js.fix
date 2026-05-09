@@ -1,0 +1,56 @@
+--- a/bin/flock.js
++++ b/bin/flock.js
+@@ -1,12 +1,18 @@
+ #!/usr/bin/env node
+
+-const MODEL = 'llama3';
++// Auto-detect available Ollama models, prefer deepseek-r1
++const PREFERRED_MODELS = ['deepseek-r1:1.5b', 'llama3.2', 'qwen3.5:latest'];
++let MODEL = 'deepseek-r1:1.5b'; // Default fallback
+
+ // Can we detect what's available? Quick check:
+ try {
+   const { execSync } = require('child_process');
+   const list = execSync('ollama list', { encoding: 'utf8' });
+-  // Simple check if model exists
++  for (const preferred of PREFERRED_MODELS) {
++    if (list.includes(preferred.split(':')[0])) {
++      MODEL = preferred;
++      break;
++    }
++  }
+ } catch(e) {
+   // Ollama might not be running, keep default
+@@ -90,8 +96,14 @@
+       const response = await fetch('http://localhost:11434/api/generate', {
+         method: 'POST',
+         body: JSON.stringify({
+-          model: 'llama3',
++          model: MODEL,
+           prompt: fullPrompt,
+           stream: false
+         })
+       });
+       
++      if (!response.ok) {
++        const errBody = await response.text();
++        throw new Error(`Ollama error (${response.status}): ${errBody}`);
++      }
++      
+       const data = await response.json();
+       console.log('\n' + data.response + '\n');
+       
+@@ -102,9 +114,12 @@
+ async function prompt() {
+   rl.question('\n  ⬡ flock ❯ ', async (input) => {
+     if (input === 'exit') {
++      console.log('  ⬡ Engine shutting down. Logging final state...');
++      // Log shutdown to ADMINReadme
++      await updateAudit('User exited flock engine.');
+       rl.close();
+       return;
+     }
+-    
+     await processInput(input);
+     prompt();
+   });

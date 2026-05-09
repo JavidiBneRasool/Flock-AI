@@ -1,0 +1,11 @@
+#TAG: UTIL
+#!/bin/bash
+while true; do
+  BATT=$(cat /sys/class/power_supply/battery/capacity 2>/dev/null || echo 100)
+  if [ "$BATT" -le 20 ]; then
+    echo "⚠️ LOW BATTERY: $BATT% - plug in charger!" > ~/flock-cli/battery_alert.txt
+    notify-send "Low Battery" "Charge your device!" || echo "Notification failed"
+    break
+  fi
+  sleep 60
+done

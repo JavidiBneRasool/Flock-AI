@@ -1,0 +1,19 @@
+# Dependency directories
+node_modules/
+
+# Logs
+*.log
+voice.log
+errors.log
+executed.log
+
+# Project specific
+.flock.pid
+.knowledge_pos
+flock_vault.db
+
+# Environment variables
+.env
+
+# System files
+.DS_Store
