@@ -5,6 +5,7 @@ import { Planner } from "../src/agents/planner.js";
 import { AutonomousLoop } from "../src/agents/autonomous.js";
 import { Auditor } from "../src/agents/auditor.js";
 import { Coordinator } from "../src/agents/coordinator.js";
+import { Phoenix } from "../src/agents/phoenix.js";
 import { MemoryEngine } from "../src/memory/engine.js";
 import { InitPrompt } from "../src/memory/init-prompt.js";
 import readline from "readline";
@@ -24,6 +25,8 @@ const loadJSON = (file, def) => { try { return JSON.parse(fs.readFileSync(file))
 const saveJSON = (file, data) => fs.writeFileSync(file, JSON.stringify(data, null, 2));
 
 let config = loadJSON(CONFIG_FILE, { agent: "local", model: "deepseek-r1:1.5b" });
+const phoenixStyle = loadJSON(path.join(CONFIG_PATH, 'phoenix_style.json'), { theme: 'classic', evolutionLevel: 1 });
+
 try {
   const list = execSync('ollama list 2>/dev/null', { encoding: 'utf8', timeout: 3000 });
   for (const m of ['deepseek-r1:1.5b', 'llama3.2:latest', 'qwen3.5:latest']) {
@@ -38,25 +41,35 @@ const planner = new Planner(brain, memory);
 const initPrompt = new InitPrompt(CONFIG_PATH);
 const autonomous = new AutonomousLoop(config.model);
 const coordinator = new Coordinator(brain, CONFIG_PATH);
+const phoenix = new Phoenix(config.model);
 let conversationHistory = [];
 
+const THEMES = {
+  classic: { g: "#4ade80", o: "#f97316", b: "#3b82f6", d: "#475569" },
+  neon: { g: "#00ff00", o: "#ff00ff", b: "#00ffff", d: "#555555" },
+  matrix: { g: "#00ff41", o: "#008f11", b: "#003b00", d: "#0d0208" },
+  sunset: { g: "#fbbf24", o: "#f87171", b: "#818cf8", d: "#1e1b4b" }
+};
+const theme = THEMES[phoenixStyle.theme] || THEMES.classic;
+
 const c = {
-  green: t => chalk.hex("#4ade80")(t), orange: t => chalk.hex("#f97316")(t),
-  blue: t => chalk.hex("#3b82f6")(t), dim: t => chalk.hex("#475569")(t),
+  green: t => chalk.hex(theme.g)(t), orange: t => chalk.hex(theme.o)(t),
+  blue: t => chalk.hex(theme.b)(t), dim: t => chalk.hex(theme.d)(t),
   red: t => chalk.hex("#ef4444")(t), yellow: t => chalk.hex("#fbbf24")(t),
   white: t => chalk.hex("#e2e8f0")(t), lime: t => chalk.hex("#a3e635")(t),
 };
 
 function printLine(type, text) {
-  const icons = { info: c.dim("·"), done: c.green("✓"), warn: c.yellow("⚠"), error: c.red("✕") };
+  const icons = { info: c.dim("·"), done: c.green("✓"), warn: c.yellow("⚠"), error: c.red("✕"), phoenix: "🔥" };
   console.log(`  ${icons[type] || icons.info}  ${(c[type] || c.white)(text)}`);
 }
 
 function printBanner() {
+  const levelStr = ` EVO L${phoenixStyle.evolutionLevel} `;
   console.log("");
   console.log(c.green("  ╔═══════════════════════════════╗"));
-  console.log(c.green("  ║  ") + c.lime("CUFIN") + c.green(".") + c.orange("FLOCK") + c.green("  ") + c.dim("v1.1.0 (LOCAL)  ") + c.green("║"));
-  console.log(c.green("  ║  ") + c.dim("Autonomous AI OS Loop       ") + c.green("║"));
+  console.log(c.green("  ║  ") + c.lime("CUFIN") + c.green(".") + c.orange("FLOCK") + c.green("  ") + c.dim(`v1.1.0 (${phoenixStyle.theme.toUpperCase()}) `) + c.green("║"));
+  console.log(c.green("  ║  ") + c.dim("Autonomous AI OS Loop") + c.orange(levelStr.padStart(10)) + c.green(" ║"));
   console.log(c.green("  ╚═══════════════════════════════╝"));
   console.log("");
   printLine("info", `Engine: ${c.green("⬡ LOCAL")} (${config.model})`);
@@ -65,6 +78,11 @@ function printBanner() {
 }
 
 const COMMANDS = {
+  // ── PHOENIX ─────────────────────────────────────────────
+  '/phoenix': async () => {
+    printLine("phoenix", "PHOENIX RECURSIVE EVOLUTION ACTIVATED");
+    await phoenix.start();
+  },
   // ── AGENT COMMANDS ──────────────────────────────────────
   '/@': async (input) => {
     const task = input.replace('/@', '').trim();
