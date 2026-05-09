@@ -56,12 +56,47 @@ export class Phoenix {
       ui.step('Styling: Adapting visual theme');
       this._evolveStyle();
 
+      // 4. Proactive Knowledge Harvesting
+      if (Math.random() > 0.5) {
+        ui.step('Harvesting: Sneaking into environments to learn');
+        await this._harvestKnowledge('.');
+      }
+
       ui.stop('Heartbeat Pulse Complete');
 
     } catch (err) {
       ui.error(`Phoenix Heartbeat Error: ${err.message}`);
     } finally {
       this.isEvolving = false;
+    }
+  }
+
+  /**
+   * Proactively scan a directory for patterns and ingest them as skills
+   */
+  async _harvestKnowledge(dir) {
+    const resolved = path.resolve(dir.replace(/^~\//, process.env.HOME + '/'));
+    const auditor = new Auditor(this.brain, this.configPath);
+    
+    // Quick audit to get context
+    const report = await auditor.audit(resolved, { deep: false, verify: false });
+    
+    if (report.aiAnalysis?.purpose) {
+      const skillName = `harvested_${path.basename(resolved)}_${this.evolutionLevel}`;
+      const skillPath = path.join(this.configPath, 'skills', `${skillName}.json`);
+      
+      if (!fs.existsSync(skillPath)) {
+        const skill = {
+          name: skillName,
+          origin: path.basename(resolved),
+          type: 'harvested_pattern',
+          context: report.aiAnalysis.purpose,
+          stack: report.heuristics?.stack || [],
+          timestamp: new Date().toISOString()
+        };
+        fs.writeFileSync(skillPath, JSON.stringify(skill, null, 2));
+        console.log(`  🌾 Harvested Pattern: ${report.aiAnalysis.purpose}`);
+      }
     }
   }
 

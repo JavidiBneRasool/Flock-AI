@@ -2,7 +2,9 @@ import { Brain } from './brain.js';
 import { Auditor } from './auditor.js';
 import { Planner } from './planner.js';
 import { Terminal } from '../tools/terminal.js';
+import { FileSystem } from '../tools/file-system.js';
 import { MemoryEngine } from '../memory/engine.js';
+import { ui } from '../tools/terminal-ui.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -18,9 +20,23 @@ const AGENTS = {
   builder: {
     role: 'System Builder',
     icon: '🔧',
-    triggers: ['build', 'create', 'write', 'add', 'scaffold', 'generate', 'make', 'compile', 'install', 'deploy', 'new'],
-    tools: ['write_file', 'terminal', 'scaffold'],
-    prompt: 'You are @builder. Create files, run commands, scaffold modules. Build what @architect designs. Generate working code.'
+    triggers: ['build', 'create', 'write', 'add', 'scaffold', 'generate', 'make', 'compile', 'install', 'deploy', 'new', 'update', 'modify'],
+    tools: ['write_file', 'terminal', 'scaffold', 'sed', 'find'],
+    prompt: 'You are @builder. Create files, run commands, scaffold modules. Build Web, Mobile (Expo), and Desktop (Electron) apps. Generate working, production-ready code.'
+  },
+  webmaster: {
+    role: 'Web Specialist',
+    icon: '🌐',
+    triggers: ['web', 'react', 'vite', 'frontend', 'ui', 'css', 'tailwind', 'html'],
+    tools: ['scaffold', 'write_file'],
+    prompt: 'You are @webmaster. Build high-performance React/Vite apps. Expert in Tailwind and modern UI patterns.'
+  },
+  mobile: {
+    role: 'Mobile Specialist',
+    icon: '📱',
+    triggers: ['mobile', 'android', 'ios', 'expo', 'react-native', 'app'],
+    tools: ['scaffold', 'write_file'],
+    prompt: 'You are @mobile. Build React Native/Expo apps for Android and iOS. Focus on mobile-native patterns.'
   },
   architect: {
     role: 'System Architect',
@@ -50,6 +66,7 @@ export class Coordinator {
     this.brain = brain;
     this.configPath = configPath || path.join(process.env.HOME, '.flock');
     this.memory = new MemoryEngine(this.configPath);
+    this.fs = new FileSystem();
     this.agents = {};
     this.messageQueue = [];
     this.activeAgents = new Set();
@@ -171,6 +188,9 @@ export class Coordinator {
       switch(name) {
         case 'auditor': result = await this._runAuditor(task); break;
         case 'builder': result = await this._runBuilder(task); break;
+        case 'webmaster': result = await this._runWebmaster(task); break;
+        case 'mobile': result = await this._runMobile(task); break;
+        case 'native': result = await this._runNative(task); break;
         case 'architect': result = await this._runArchitect(task); break;
         case 'watcher': result = await this._runWatcher(task); break;
         case 'vault': result = await this._runVault(task); break;
@@ -448,6 +468,98 @@ export class Coordinator {
   }
 
   // ── PERSISTENT MEMORY ─────────────────────────────────────────
+
+  _loadMemory() {
+    const file = path.join(this.configPath, 'agent_memory.json');
+    try { return JSON.parse(fs.readFileSync(file, 'utf8')); }
+    catch { return {}; }
+  }
+
+  _saveMemory() {
+    const file = path.join(this.configPath, 'agent_memory.json');
+    fs.writeFileSync(file, JSON.stringify(this.agentMemory, null, 2));
+  }
+
+  _saveAgentMemory(name, memory) {
+    this.agentMemory[`agent_${name}`] = memory.slice(-100); // Keep last 100 entries
+    this._saveMemory();
+  }
+
+  _loadMissions() {
+    const file = path.join(this.configPath, 'missions.json');
+    try { return JSON.parse(fs.readFileSync(file, 'utf8')); }
+    catch { return {}; }
+  }
+
+  // ── VAULT OPERATIONS ──────────────────────────────────────────
+
+  _vaultStore(key, data) {
+    const dir = path.join(this.configPath, 'vault');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, `${key}.json`), JSON.stringify(data, null, 2));
+  }
+
+  _storeInteraction(input, results) {
+    const dir = path.join(this.configPath, 'messages');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, `msg_${Date.now()}.json`), JSON.stringify({
+      timestamp: new Date().toISOString(), input,
+      agents: results.map(r => r.agent),
+      results: results.map(r => ({ agent: r.agent, action: r.result?.action }))
+    }, null, 2));
+  }
+
+  _storeChain(commands, outputs) {
+    const dir = path.join(this.configPath, 'chains');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, `chain_${Date.now()}.json`), JSON.stringify({
+      timestamp: new Date().toISOString(), commands,
+      stages: outputs.length
+    }, null, 2));
+  }
+
+  _extractPath(text) {
+    const match = text.match(/(~\/\S+|\/[^\s]+)/);
+    return match ? match[1] : null;
+  }
+
+  /**
+   * Restore agents from previous session
+   */
+  restoreSession() {
+    const restored = [];
+    for (const [key, memory] of Object.entries(this.agentMemory)) {
+      const name = key.replace('agent_', '');
+      if (AGENTS[name] && memory.length > 0) {
+        this.spawn(name);
+        restored.push(name);
+      }
+    }
+    return restored;
+  }
+
+  /**
+   * Get full status
+   */
+  status() {
+    return {
+      registered: Object.keys(AGENTS),
+      active: [...this.activeAgents],
+      spawned: Object.entries(this.agents).map(([name, a]) => ({
+        name: `@${name}`, role: a.role, state: a.state,
+        memorySize: a.memory.length, tasksCompleted: a.tasksCompleted,
+        spawned: a.spawned
+      })),
+      vaultSize: (() => {
+        try { return fs.readdirSync(path.join(this.configPath, 'vault')).length; } catch { return 0; }
+      })(),
+      messagesSize: (() => {
+        try { return fs.readdirSync(path.join(this.configPath, 'messages')).length; } catch { return 0; }
+      })()
+    };
+  }
+}
+TENT MEMORY ─────────────────────────────────────────
 
   _loadMemory() {
     const file = path.join(this.configPath, 'agent_memory.json');
