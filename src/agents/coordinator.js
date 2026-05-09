@@ -308,6 +308,13 @@ export class Coordinator {
     // Fallback: just "build path" without tilde
     if (!writeMatch) writeMatch = task.match(/(?:write|create|scaffold|build|generate|add|new|make)\s+(?:a\s+|an\s+)?(?:file\s+)?(?:at\s+)?(\/\S+\.?\w*)\s*:?\s*(.*)/i);
     const cmdMatch = task.match(/(?:run|execute|shell)\s+(.+)/i);
+    const sedMatch = task.match(/(?:sed|replace|update)\s+"(.+)"\s+with\s+"(.+)"\s+in\s+"(.+)"/i);
+
+    if (sedMatch) {
+      const [_, pattern, replacement, include] = sedMatch;
+      const results = await this.fs.sed(pattern, replacement, include);
+      return { action: 'bulk_edit', pattern, replacement, results };
+    }
     
     if (writeMatch) {
       const [_, filepath, description] = writeMatch;
@@ -331,11 +338,58 @@ export class Coordinator {
     if (cmdMatch) {
       const terminal = new Terminal();
       const output = await terminal.execute(cmdMatch[1]).catch(e => e.message);
-      return { action: 'terminal', command: cmdMatch[1], output: output?.substring(0, 500) };
+      return { action: 'terminal', command: cmdMatch[1], output: String(output?.output || output).substring(0, 500) };
     }
     
     // Generic — return scaffold suggestion
     return { action: 'suggest', files: this._suggestFiles(task), tip: 'Use: build path/to/file.js: description' };
+  }
+
+  async _runWebmaster(task) {
+    const target = this._extractPath(task) || './web-app';
+    const resolved = path.resolve(target.replace(/^~\//, process.env.HOME + '/'));
+    
+    console.log(`  🌐 Building Web Framework at ${resolved}...`);
+    
+    const files = {
+      'index.html': `<!DOCTYPE html>\n<html>\n<head>\n  <title>Flock App</title>\n  <script src="https://cdn.tailwindcss.com"></script>\n</head>\n<body class="bg-slate-900 text-white flex items-center justify-center h-screen">\n  <div class="text-center p-8 bg-slate-800 rounded-xl shadow-2xl border border-slate-700">\n    <h1 class="text-4xl font-bold mb-4 text-green-400">CUFIN.FLOCK</h1>\n    <p class="text-slate-400 mb-6">Generated Web Interface</p>\n    <button class="bg-green-500 hover:bg-green-600 text-slate-900 font-bold py-2 px-6 rounded-lg transition-colors">Initialize Module</button>\n  </div>\n</body>\n</html>`,
+      'package.json': JSON.stringify({ name: "flock-web", version: "1.0.0", dependencies: { "vite": "latest" } }, null, 2),
+      'src/main.js': `console.log('Flock Web Module Active');`
+    };
+
+    await this.fs.scaffold(resolved, files);
+    return { action: 'web_scaffold', path: resolved, stack: ['HTML5', 'Tailwind', 'Vite'] };
+  }
+
+  async _runMobile(task) {
+    const target = this._extractPath(task) || './mobile-app';
+    const resolved = path.resolve(target.replace(/^~\//, process.env.HOME + '/'));
+    
+    console.log(`  📱 Scaffolding Mobile (Android/iOS) project...`);
+    
+    const files = {
+      'App.js': `import React from 'react';\nimport { StyleSheet, Text, View } from 'react-native';\n\nexport default function App() {\n  return (\n    <View style={styles.container}>\n      <Text style={styles.title}>CUFIN.FLOCK Mobile</Text>\n      <Text style={styles.subtitle}>Autonomous Agent Interface</Text>\n    </View>\n  );\n}\n\nconst styles = StyleSheet.create({\n  container: { flex: 1, backgroundColor: '#0f172a', alignItems: 'center', justifyContent: 'center' },\n  title: { fontSize: 24, color: '#4ade80', fontWeight: 'bold' },\n  subtitle: { color: '#94a3b8' }\n});`,
+      'package.json': JSON.stringify({ name: "flock-mobile", dependencies: { "react-native": "latest", "expo": "latest" } }, null, 2)
+    };
+
+    await this.fs.scaffold(resolved, files);
+    return { action: 'mobile_scaffold', path: resolved, stack: ['React Native', 'Expo'] };
+  }
+
+  async _runNative(task) {
+    const target = this._extractPath(task) || './desktop-app';
+    const resolved = path.resolve(target.replace(/^~\//, process.env.HOME + '/'));
+    
+    console.log(`  💻 Scaffolding Native Desktop (Electron) project...`);
+    
+    const files = {
+      'main.js': `const { app, BrowserWindow } = require('electron');\nfunction createWindow () {\n  const win = new BrowserWindow({ width: 800, height: 600 });\n  win.loadFile('index.html');\n}\napp.whenReady().then(createWindow);`,
+      'index.html': `<h1>Flock Desktop</h1><p>Running Native Engine</p>`,
+      'package.json': JSON.stringify({ name: "flock-desktop", main: "main.js", dependencies: { "electron": "latest" } }, null, 2)
+    };
+
+    await this.fs.scaffold(resolved, files);
+    return { action: 'desktop_scaffold', path: resolved, stack: ['Electron', 'Node.js'] };
   }
   
   _generateFromTemplate(filepath, description, fullTask) {
